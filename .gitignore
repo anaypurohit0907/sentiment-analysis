@@ -3,6 +3,7 @@
 *.tmp
 *.temp
 /.rustc_info.json
+.rustc_info.json
 # Common artifacts
 *.bin
 *.json
