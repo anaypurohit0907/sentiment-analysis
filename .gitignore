@@ -13,4 +13,4 @@
 *.d
 
 #cargo debugging files
-/target/
+target/
