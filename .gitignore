@@ -1,0 +1,16 @@
+# Logs and temp
+*.log
+*.tmp
+*.temp
+/.rustc_info.json
+# Common artifacts
+*.bin
+*.json
+*.txt
+*.csv
+*.npz
+*.
+*.d
+
+#cargo debugging files
+/target/
