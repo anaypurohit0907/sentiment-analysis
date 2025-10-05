@@ -1,5 +1,5 @@
 use anyhow::Result;
-
+use csv::ReaderBuilder;
 // Folder modules
 mod preprocessing;
 mod tfidf;
@@ -7,6 +7,7 @@ mod tfidf;
 // Public API from modules
 use crate::preprocessing::tokenizer::tokenize;
 use crate::tfidf::TfIdfVectorizer;
+use std::collections::HashMap;
 
 // --- Assume these exist elsewhere in the project ---
 #[allow(dead_code)]
@@ -47,6 +48,43 @@ fn sparse_to_dense(
 }
 
 fn main() -> Result<()> {
+    //tfidf-ing the dataset
+// 1) Load CSV (headers: text,label)
+    let mut rdr = ReaderBuilder::new()
+        .has_headers(true)
+        .from_path("result.csv")?;
+
+    let mut texts: Vec<String> = Vec::new();
+    let mut labels: Vec<f32> = Vec::new();
+    for rec in rdr.records() {
+        let r = rec?;
+        let text = r.get(0).unwrap_or("").to_string();
+        let label: f32 = r.get(1).unwrap_or("0").parse().unwrap_or(0.0);
+        texts.push(text);
+        labels.push(label);
+    }
+
+    // 2) Tokenize
+    let tokenized: Vec<Vec<String>> = texts.iter().map(|t| tokenize(t)).collect();
+
+    // 3) Fit TF-IDF on corpus (for a real pipeline, fit on train split only)
+    let vectorizer = TfIdfVectorizer::fit(&tokenized);
+
+    // 4) Transform each row to sparse TF-IDF and L2-normalize
+    let mut features: Vec<HashMap<usize, f32>> = Vec::with_capacity(tokenized.len());
+    for toks in &tokenized {
+        let mut v = vectorizer.transform(toks);
+        TfIdfVectorizer::l2_normalize(&mut v);
+        features.push(v);
+    }
+
+    // Now `features` holds sparse TF-IDF for each row, and `labels` holds [-1,1] targets.
+    println!("Vocab size: {}", vectorizer.vocab.len());
+    println!("First row nonzeros: {:?}", features.get(0));
+
+
+// THIS LINE ENDS VECTORIZING THE DATASET
+
     // 1) Preprocess flow (old)
     let text = "This is a test sentence, with punctuation!";
     let tokens = tokenize(text);
