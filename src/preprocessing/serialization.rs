@@ -7,6 +7,7 @@ use chrono::Utc;
 
 use crate::tfidf::vectorizer::TfIdfVectorizer;
 
+
 /// Metadata about the processed dataset
 #[derive(Serialize, Deserialize, Debug)]
 pub struct DatasetMetadata {

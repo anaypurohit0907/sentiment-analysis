@@ -90,3 +90,48 @@ pub fn preview_params(weights: &Vec<Vec<Vec<f32>>>, biases: &Vec<Vec<f32>>, k: u
         println!("  b[0..{k}]: {:?}", bhead);
     }
 }
+pub fn forward_with_cache(
+    input: &[f32],
+    weights: &Vec<Vec<Vec<f32>>>,
+    biases: &Vec<Vec<f32>>,
+) -> (Vec<Vec<f32>>, Vec<Vec<f32>>) {
+    let mut activations: Vec<Vec<f32>> = Vec::with_capacity(weights.len() + 1);
+    let mut pre_activations: Vec<Vec<f32>> = Vec::with_capacity(weights.len());
+
+    // a^(0) = input
+    activations.push(input.to_vec());
+    let mut a = input.to_vec();
+
+    for (l, (w, b)) in weights.iter().zip(biases.iter()).enumerate() {
+        // z = W a + b
+        let z = mat_vec_mul(w, &a);
+        let z_bias = vec_add(&z, b);
+        pre_activations.push(z_bias.clone());
+
+        // activation: ReLU for hidden, identity for last layer
+        a = if l < weights.len() - 1 {
+            relu(&z_bias)
+        } else {
+            z_bias
+        };
+        activations.push(a.clone());
+    }
+
+    (activations, pre_activations)
+}
+pub fn update_params(
+    weights: &mut Vec<Vec<Vec<f32>>>,
+    biases: &mut Vec<Vec<f32>>,
+    d_weights: &Vec<Vec<Vec<f32>>>,
+    d_biases: &Vec<Vec<f32>>,
+    learning_rate: f32,
+) {
+    for l in 0..weights.len() {
+        for i in 0..weights[l].len() {
+            for j in 0..weights[l][i].len() {
+                weights[l][i][j] -= learning_rate * d_weights[l][i][j];
+            }
+            biases[l][i] -= learning_rate * d_biases[l][i];
+        }
+    }
+}
