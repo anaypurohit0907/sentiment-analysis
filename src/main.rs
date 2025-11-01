@@ -14,29 +14,40 @@ fn load_model_bin(path: &str) -> Result<(Vec<Vec<Vec<f32>>>, Vec<Vec<f32>>)> {
     Ok((weights, biases))
 }
 
+fn softmax(logits: &[f32]) -> Vec<f32> {
+    let max_logit = logits.iter().cloned().fold(f32::NEG_INFINITY, f32::max);
+    let exps: Vec<f32> = logits.iter().map(|&z| (z - max_logit).exp()).collect();
+    let sum: f32 = exps.iter().sum();
+    if sum == 0.0 {
+        vec![1.0 / logits.len() as f32; logits.len()]
+    } else {
+        exps.into_iter().map(|e| e / sum).collect()
+    }
+}
+
 fn main() -> Result<()> {
     // 1) Load saved model
     let (weights, biases) = load_model_bin("model.bin")?;
 
-    // 2) Load the same vectorized dataset bundle to get feature width and a few samples
-    let data = serialization::load_all("data")?; // provides train/test vectors and labels + input_size
+    // 2) Load the vectorized dataset (or your own vectorized inputs)
+    let data = serialization::load_all("data")?;
 
-    // 3) Pick a few test samples and run forward
+    // 3) Exactly one scalar per row
+    let idx_to_label = [-1.0, 0.0, 1.0]; // fixed order [-1, 0, +1]
     for i in 0..3 {
-        let x = &data.test_vectors[i]; // already TF-IDF vector of length input_size
+        let x = &data.test_vectors[i];
         let logits = forward_pass(x, &weights, &biases);
-        // argmax
-        let (argmax, _) = logits.iter()
-                                .enumerate()
-                                .max_by(|a, b| a.1.partial_cmp(b.1).unwrap())
-                                .unwrap();
-        let true_y = data.test_labels[i];
-        let pred_label = match argmax {
-            0 => -1.0,
-            1 => 0.0,
-            _ => 1.0,
-        };
-        println!("sample {} true={} pred_class={} logits={:?}", i, true_y, pred_label, logits);
+        let probs = softmax(&logits);
+        let (argmax, _) = probs
+            .iter()
+            .enumerate()
+            .max_by(|a, b| a.1.partial_cmp(b.1).unwrap())
+            .unwrap();
+        let y_hat = idx_to_label[argmax]; // single output in {-1, 0, +1}
+
+        // Print only the scalar (uncomment one of the lines below depending on what you want)
+        println!("{}", y_hat);                                   // strict single value
+        // println!("row={} pred={} p={:.3}", i, y_hat, probs[argmax]); // scalar + confidence
     }
 
     Ok(())
