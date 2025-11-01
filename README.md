@@ -1,6 +1,6 @@
 # Sentiment Analysis (Rust)
 
-A modular Rust project for preparing a text sentiment dataset with robust tokenization and TF‑IDF feature extraction, saving portable artifacts for training and inference, and demonstrating how to load and use those artifacts. The code emphasizes reproducibility, interpretability of preprocessing, and simple integration points for modeling.
+A modular Rust project for preparing a text sentiment dataset with robust tokenization and TF‑IDF feature extraction, saving portable artifacts for training and inference, and demonstrating how to load and use those artifacts. It also includes a hybrid Neuro‑Fuzzy layer on top of a neural network for interpretable post‑processing and a demo/evaluator to showcase it. The code emphasizes reproducibility, interpretability, and simple integration points for modeling.
 
 This README documents the full pipeline, how to run it, the modules, data shapes, and practical tips/troubleshooting.
 
@@ -19,11 +19,15 @@ This README documents the full pipeline, how to run it, the modules, data shapes
 
 - `src/bin/prepare_data.rs` — End‑to‑end preprocessing pipeline into TF‑IDF and serialized artifacts.
 - `src/bin/load_data_example.rs` — Loads the saved artifacts and demonstrates transforming new text.
+- `src/bin/neuro_fuzzy_demo.rs` — Interactive REPL demo that runs the NN and Neuro‑Fuzzy hybrid, prints memberships, rule strengths, labels, and confidence.
+- `src/bin/evaluate.rs` — Reports NN‑only vs Neuro‑Fuzzy accuracy on the test split from `data/`.
 - `src/preprocessing/tokenizer.rs` — Text cleaning and tokenization utilities.
 - `src/tfidf/vectorizer.rs` — Configurable TF‑IDF with n‑grams, term filtering, dense/sparse conversions.
 - `src/preprocessing/serialization.rs` — Save/load vectorizer, matrices, labels, and metadata.
 - `src/NN/…` — Minimal neural network utilities and a `train_model` function (example), for those who want to experiment further.
 - `src/utils.rs` — Train/test split helpers, including a stratified variant.
+- `src/fuzzy/neuro_sugeno.rs` — Neuro‑Fuzzy hybrid (NN‑driven memberships + Sugeno rules).
+- `src/fuzzy/params.rs` — Centralized tuned parameters and default rule base shared by demo/evaluator.
 - `data/` — Output folder for serialized artifacts created by the pipeline.
 
 
@@ -112,6 +116,27 @@ What it does:
 - Loads all artifacts from `data/`.
 - Prints dataset summary and shows how to transform a custom sentence into TF‑IDF.
 
+3) Run the Neuro‑Fuzzy interactive demo
+
+```bash
+cargo run --bin neuro_fuzzy_demo
+```
+
+What it does:
+- Loads `data/` artifacts and a trained model from `model.bin`.
+- For each input line, computes logits → softmax (with temperature) → Neuro‑Fuzzy memberships and rule strengths → hybrid score and label.
+- Prints both the Neuro‑Fuzzy label (with a confidence heuristic) and the NN‑only argmax baseline.
+
+4) Evaluate accuracy on the test set
+
+```bash
+cargo run --bin evaluate
+```
+
+What it does:
+- Loads `data/` test vectors and labels and `model.bin`.
+- Reports NN‑only accuracy and Neuro‑Fuzzy accuracy (using the shared tuned parameters and rules).
+
 
 ## Using the artifacts in your own code
 
@@ -133,6 +158,20 @@ let tokens = tok.tokenize("An unexpectedly enjoyable film");
 let sparse = data.vectorizer.transform(&tokens);
 let dense  = data.vectorizer.to_dense(&sparse);
 assert_eq!(dense.len(), d);
+```
+
+### Using the Neuro‑Fuzzy hybrid
+
+```rust
+use sentiment_analysis::fuzzy::params;
+use sentiment_analysis::fuzzy::neuro_sugeno::{InferLogits, NeuroSugeno};
+
+// Your model type must implement InferLogits (see binaries for a simple adapter)
+let model = /* load NN model, wrap in adapter */;
+let nf: NeuroSugeno<_> = NeuroSugeno { provider: params::tuned_provider(model), rules: params::default_rules() };
+
+let score = nf.infer_score(&dense);
+let label = nf.infer_label_with_threshold(&dense, params::NF_LABEL_THRESHOLD); // -1, 0, +1
 ```
 
 
@@ -244,6 +283,44 @@ Notes:
 - Add cross‑validation or a validation split and perform TF‑IDF hyperparameter sweeps.
 - Integrate probability calibration and downstream logic.
 - Add confusion matrix and per‑class metrics in an evaluation binary.
+- Add a config file for Neuro‑Fuzzy parameters if you want to switch settings without recompiling.
+
+
+## Neuro‑Fuzzy details
+
+The hybrid combines the NN output with interpretable cues and Sugeno‑style rules:
+
+- Memberships (6‑dim):
+  - μ_neg, μ_neu, μ_pos — NN softmax probabilities (with temperature) for each class.
+  - conf_high — a margin‑based confidence cue (top‑1 minus top‑2).
+  - ambig_high — an entropy‑based ambiguity cue.
+  - pos_over_neg_high — a direct logit gap (z_pos − z_neg) cue.
+- Rules: product t‑norm over selected memberships; consequents are constants; output is weighted average.
+- Label mapping: score in (−∞, ∞) mapped to {−1, 0, +1} using a threshold τ.
+
+Centralized configuration lives in `src/fuzzy/params.rs`:
+
+```rust
+pub const NF_TEMPERATURE: f32 = 0.8;
+pub const NF_MARGIN_CENTER: f32 = 0.3;
+pub const NF_MARGIN_SLOPE: f32 = 5.0;
+pub const NF_ENTROPY_CENTER: f32 = 1.0;
+pub const NF_ENTROPY_SLOPE: f32 = 6.0;
+pub const NF_GAP_CENTER: f32 = 0.2;
+pub const NF_GAP_SLOPE: f32 = 4.0;
+pub const NF_LABEL_THRESHOLD: f32 = 0.33;
+pub const NF_CLASS_ORDER: [usize; 3] = [0, 1, 2];
+```
+
+Edit these constants (and/or `default_rules()`) to change behavior globally for both demo and evaluator.
+
+Example current results on the included dataset (for reference; your results may vary):
+
+```
+Results on test set (N = 707):
+  NN‑only accuracy:     60.11% (425 / 707)
+  Neuro‑Fuzzy accuracy: 58.84% (416 / 707)
+```
 
 
 ## FAQ

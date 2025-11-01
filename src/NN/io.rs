@@ -3,6 +3,7 @@ use std::fs::File;
 use std::io::{BufWriter, Write};
 use csv::ReaderBuilder;
 use anyhow::{Result, Context};
+use std::io::BufReader;
 
 /// Structure to hold sentiment data
 #[derive(Debug, Clone)]
@@ -116,4 +117,23 @@ pub fn write_params_to_txt(
         }
     }
     Ok(())
+}
+
+// -------------------- Trained model loading and inference --------------------
+
+#[derive(Clone)]
+pub struct TrainedModel {
+    pub weights: Vec<Vec<Vec<f32>>>,
+    pub biases: Vec<Vec<f32>>,
+}
+
+/// Load a trained model saved with bincode as (weights, biases)
+pub fn load_trained_model(path: &str) -> Result<TrainedModel> {
+    use bincode::{DefaultOptions, Options};
+    let f = File::open(path).context(format!("Failed to open model file: {}", path))?;
+    let mut reader = BufReader::new(f);
+    let (weights, biases): (Vec<Vec<Vec<f32>>>, Vec<Vec<f32>>) =
+        DefaultOptions::new().deserialize_from(&mut reader)
+        .context("Failed to deserialize model (weights,biases) from bincode")?;
+    Ok(TrainedModel { weights, biases })
 }

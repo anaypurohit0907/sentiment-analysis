@@ -160,6 +160,17 @@ let dense_vec = data.vectorizer.to_dense(&sparse_vec);
 // Now feed dense_vec to your neural network
 ```
 
+### Next: Neuro‑Fuzzy demo and evaluation
+
+Once you have `data/` prepared and a trained model saved to `model.bin`, you can:
+
+```bash
+cargo run --bin neuro_fuzzy_demo   # interactive REPL with memberships and rules
+cargo run --bin evaluate           # report NN‑only vs Neuro‑Fuzzy accuracy
+```
+
+The tuned parameters and default rules are centralized in `src/fuzzy/params.rs`. Changing them affects both binaries.
+
 ## 🔧 Configuration
 
 ### TF-IDF Parameters (in `prepare_data.rs`)
